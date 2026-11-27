@@ -58,16 +58,16 @@
       </div>
 
       <div class="brief-grid">
-        <div class="card">
-          <div class="card-head">
-            <h2>Job description</h2>
+        <details class="card jd-card" open>
+          <summary class="card-head"><h2>Job description</h2></summary>
+          <div class="actions jd-actions">
             <label class="btn secondary sm file-btn">Load from file
               <input id="jd-file" type="file" accept=".pdf,.docx,.txt,.md" hidden>
             </label>
           </div>
           <label class="sr-only" for="jd">Job description text</label>
-          <textarea id="jd" class="jd" rows="24" spellcheck="false"></textarea>
-        </div>
+          <textarea id="jd" class="jd" rows="16" spellcheck="false"></textarea>
+        </details>
 
         <div class="card">
           <div class="card-head">

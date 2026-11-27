@@ -140,8 +140,13 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 
 /* ---------------- job & rubric ---------------- */
 .brief-grid { display: grid; gap: 1.25rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
-@media (min-width: 1280px) { .brief-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr); } }
-.jd { min-height: 560px; font-size: 0.875rem; color: var(--text); }
+.jd { min-height: 360px; font-size: 0.875rem; color: var(--text); }
+.jd-card summary { cursor: pointer; list-style: none; justify-content: flex-start; }
+.jd-card summary::-webkit-details-marker { display: none; }
+.jd-card summary::before { content: "▸"; color: var(--muted); transition: transform .15s; }
+.jd-card[open] summary::before { transform: rotate(90deg); }
+.jd-card:not([open]) summary { margin-bottom: 0; }
+.jd-actions { margin-bottom: 0.75rem; }
 .criteria { overflow-x: auto; margin-bottom: 1rem; border: 1px solid var(--border); border-radius: 10px; }
 .rubric-table { min-width: 680px; }
 .rubric-table th { position: static; cursor: default; }
