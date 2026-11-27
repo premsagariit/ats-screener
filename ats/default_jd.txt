@@ -1,0 +1,93 @@
+ AI Engineer (Graduate Hire)
+ AI Lab • Niva Bupa Health Insurance
+
+About Niva Bupa
+At Niva Bupa, our purpose is to give every Indian the confidence to access the best healthcare.
+We are a certified Great Place to Work, covering more than 22 million lives across a network of
+10,400+ hospitals. As part of the global Bupa healthcare group, we empower our customers to
+take control of their health and live life to the fullest.
+
+About the AI Lab
+The AI Lab at Niva Bupa builds enterprise-grade Generative AI and Agentic Systems that power
+the core of our health insurance operations. Our mission is to transform claims automation,
+underwriting intelligence, care journeys, sales productivity, and next-generation customer
+experiences using deep tech. As a member joining as an AI Engineer, you will work
+at the intersection of advanced AI (LLMs, agentic systems), large-scale enterprise systems, and
+direct business impact.
+
+The Opportunity
+  • Massive impact: The work you do will directly influence the health and well-being of
+    millions of Indians. This is AI with a purpose.
+  • True full-stack ownership: You won't be a cog in a wheel. You will see your projects all
+    the way from research to production.
+  • The best of both worlds: The innovative, fast-paced culture of a tech start-up, backed by
+    the stability and resources of a market leader.
+
+What You'll Work On
+1. Generative AI Core Engineering & Agent Orchestration
+  • Help architect and deploy multi-agent workflows using modern orchestration frameworks
+    (LangGraph, LlamaIndex, Bedrock, Vertex AI) to solve complex, multi-step business
+    problems.
+  • Design and build Retrieval-Augmented Generation (RAG) systems, fine-tuned LLMs, high-
+    performance embeddings pipelines, and document intelligence solutions.
+  • Contribute to productionizing LLM-based agents for claims validation, pre-authorization,
+    sales advisory, care management, and internal AI copilots.
+  • Support work on advanced models, including transformers, diffusion models, and multi-
+    modal (vision, speech) models for specialized health-tech challenges.
+
+
+2. Full-Stack Product Engineering
+  • Work across the entire UI → API → Model workflow, ensuring seamless, high-
+    performance integration from front-end to inference.
+  • Build user interfaces using modern frameworks (Next.js, React, Streamlit) for both
+    customer-facing and internal operational tools.
+  • Develop scalable backend microservices (Python/FastAPI, Node.js/Express) optimized for
+    LLM inference and large-scale data serving.
+
+
+3. LLMOps & Deployment
+  • Ship models to production using modern MLOps tooling (MLflow, CI/CD, Docker,
+    Kubernetes).
+  • Help optimize latency, throughput, inference cost, and security for deployed GenAI
+    services.
+  • Build monitoring and observability for GenAI: model drift, hallucination and toxicity rates,
+    guardrail/compliance violations, and agent decision tracing.
+
+
+What You Bring to the Table
+Must-Haves
+  • Strong fundamentals in algorithms, data structures, distributed systems, and applied
+    Machine Learning / Deep Learning.
+  • Hands-on exposure to LLMs and at least one agent/orchestration framework
+    (LangChain/LangGraph, LlamaIndex, Bedrock, or Vertex) through projects, internships, or
+    research.
+  • Working proficiency in Python; familiarity with a modern web stack (React/Next.js front-
+    end, FastAPI or Node.js back-end).
+  • A builder's mindset — comfortable in ambiguous, “0 to 1” environments where you help
+     define both the product and the architecture.
+Preferred
+  • Experience with multi-modal models (vision, speech) relevant to healthcare/insurance
+    documentation.
+  • Exposure to fine-tuning LLMs or training custom small models for domain-specific tasks.
+  • Interest in or exposure to healthcare, insurance, or financial services domains.
+  • Familiarity with optimizing LLM inference (quantization, compilation, specialized
+    hardware).
+Why Niva Bupa's AI Lab?
+   • Real impact: Build enterprise-grade AI engines that touch millions of customers and
+     redefine how health insurance runs in India.
+   • Executive backing: Work with a leadership team that understands AI, with real budgets
+     and high architectural autonomy.
+   • Ownership: Startup-level ownership with the security and scale of the larger Bupa group.
+
+Your Career Trajectory
+AI Engineer → Applied AI Architect → AI Lab Lead
+
+Role Details
+
+ Team                                 AI Lab, Niva Bupa Health Insurance
+ Employment Type                      Full-time
+ Location                             Gurgaon
+
+
+Niva Bupa Health Insurance Company Limited is an equal opportunity employer. “Bupa” and the “HEARTBEAT” logo are registered
+trademarks used under license.

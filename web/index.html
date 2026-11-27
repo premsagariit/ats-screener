@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resume Screener</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="shell">
+
+  <!-- ================= sidebar ================= -->
+  <aside class="side">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 20 20" width="20" height="20"><rect x="2" y="9" width="7" height="3" rx="1"/><rect x="10" y="9" width="4" height="3" rx="1" opacity=".7"/><rect x="15" y="9" width="3" height="3" rx="1" opacity=".45"/></svg>
+      </span>
+      <span class="brand-text"><b>Resume Screener</b><small>Rubric-based shortlisting</small></span>
+    </div>
+
+    <nav class="tabs" role="tablist" aria-label="Steps" aria-orientation="vertical">
+      <p class="nav-label">Workflow</p>
+      <button role="tab" id="t-brief" aria-controls="tab-brief" aria-selected="true"><span class="step">1</span>Job &amp; rubric</button>
+      <button role="tab" id="t-screen" aria-controls="tab-screen" aria-selected="false"><span class="step">2</span>Upload &amp; screen</button>
+      <button role="tab" id="t-results" aria-controls="tab-results" aria-selected="false" disabled><span class="step">3</span>Ranked results</button>
+    </nav>
+
+    <div class="side-foot">
+      <div id="model-chip" class="model-card" hidden></div>
+      <button id="clear-cache" class="btn secondary block" type="button" title="Forget saved scores so every resume is re-scored on the next run">Clear score cache</button>
+    </div>
+  </aside>
+
+  <!-- ================= main ================= -->
+  <main>
+    <div id="banner" class="banner" role="alert" hidden></div>
+
+    <!-- ============ Job & rubric ============ -->
+    <section id="tab-brief" role="tabpanel" aria-labelledby="t-brief">
+      <header class="page-head">
+        <div>
+          <h1>Job &amp; rubric</h1>
+          <p>Set the job description and the weighted criteria every resume is scored against.</p>
+        </div>
+      </header>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Weight distribution</h2>
+          <span id="ruler-title" class="meta"></span>
+        </div>
+        <div id="weight-ruler" class="ruler big" aria-hidden="true"></div>
+        <ul id="weight-legend" class="legend"></ul>
+        <p id="weight-note" class="note warn-text"></p>
+      </div>
+
+      <div class="brief-grid">
+        <div class="card">
+          <div class="card-head">
+            <h2>Job description</h2>
+            <label class="btn secondary sm file-btn">Load from file
+              <input id="jd-file" type="file" accept=".pdf,.docx,.txt,.md" hidden>
+            </label>
+          </div>
+          <label class="sr-only" for="jd">Job description text</label>
+          <textarea id="jd" class="jd" rows="24" spellcheck="false"></textarea>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Criteria</h2>
+            <div class="actions">
+              <button id="gen-rubric" class="btn secondary sm" type="button" title="Ask the AI to draft criteria and weights for this job description">Draft from job description</button>
+              <button id="reset-rubric" class="btn secondary sm" type="button">Reset to defaults</button>
+            </div>
+          </div>
+          <div id="criteria" class="criteria"></div>
+          <button id="add-criterion" class="btn secondary sm" type="button">+ Add criterion</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Upload & screen ============ -->
+    <section id="tab-screen" role="tabpanel" aria-labelledby="t-screen" hidden>
+      <header class="page-head">
+        <div>
+          <h1>Upload &amp; screen</h1>
+          <p>Add resumes, then score and rank them against the rubric.</p>
+        </div>
+      </header>
+
+      <div id="drop" class="drop" tabindex="0" role="button" aria-label="Choose resume files">
+        <input id="resume-files" type="file" multiple accept=".pdf,.docx,.txt,.md,.zip" hidden>
+        <span class="drop-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+        </span>
+        <p class="drop-main"><b>Click to upload</b> or drag and drop</p>
+        <p class="drop-sub">PDF, DOCX, TXT or ZIP. Use a ZIP for 1000+ files. Scanned image-only PDFs are flagged for manual review.</p>
+      </div>
+      <p id="upload-status" class="note" aria-live="polite"></p>
+
+      <div id="batch" hidden>
+        <dl class="stats">
+          <div class="stat"><dt>Resumes found</dt><dd id="b-found">0</dd></div>
+          <div class="stat"><dt>Readable</dt><dd id="b-readable">0</dd></div>
+          <div class="stat"><dt>Unreadable</dt><dd id="b-unreadable">0</dd></div>
+          <div class="stat"><dt>Duplicates skipped</dt><dd id="b-dups">0</dd></div>
+        </dl>
+        <div class="card">
+          <details id="b-bad" class="bad-files" hidden><summary></summary><ul id="b-bad-list"></ul></details>
+          <label class="field slider">
+            <span>Parallel requests <output id="conc-out">20</output></span>
+            <input id="conc" type="range" min="1" max="50" step="1" value="20" aria-describedby="conc-help">
+            <small id="conc-help">How many resumes are scored at the same time. Requests are also paced to stay
+              under your account's per-minute limits, so very high values mostly queue.</small>
+          </label>
+          <p id="b-estimate" class="note"></p>
+          <div class="actions">
+            <button id="run" class="btn primary" type="button">Screen and rank resumes</button>
+            <button id="clear-batch" class="btn secondary" type="button">Remove all uploads</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="progress" class="card progress" hidden>
+        <div class="card-head">
+          <h2>Screening in progress</h2>
+          <button id="stop" class="btn secondary sm" type="button">Stop</button>
+        </div>
+        <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="bar-fill"></i></div>
+        <p id="progress-text" class="mono progress-text"></p>
+        <p id="progress-counts" class="note"></p>
+      </div>
+    </section>
+
+    <!-- ============ Results ============ -->
+    <section id="tab-results" role="tabpanel" aria-labelledby="t-results" hidden>
+      <header class="page-head">
+        <div>
+          <h1>Ranked results</h1>
+          <p id="run-meta">Candidates sorted by total score, highest first.</p>
+        </div>
+        <div class="actions" id="exports" hidden>
+          <a id="dl-csv" class="btn secondary" href="#">Download CSV</a>
+          <a id="dl-xlsx" class="btn primary" href="#">Download Excel</a>
+        </div>
+      </header>
+
+      <div id="results-empty" class="empty">
+        <p><b>No results yet</b></p>
+        <p>Upload resumes and run screening to see the ranked shortlist here.</p>
+      </div>
+
+      <div id="results-body" hidden>
+        <dl class="stats" id="kpis"></dl>
+
+        <div class="card toolbar">
+          <label class="field grow">
+            <span>Search</span>
+            <input id="f-q" type="search" placeholder="Name, file, summary or skill">
+          </label>
+          <label class="field">
+            <span>Minimum score <output id="min-out">0</output></span>
+            <input id="f-min" type="range" min="0" max="100" value="0">
+          </label>
+          <label class="field narrow">
+            <span>Shortlist threshold</span>
+            <input id="f-th" type="number" min="0" max="100" value="70">
+          </label>
+          <fieldset class="field statuses">
+            <legend>Status</legend>
+            <div class="checks">
+              <label><input type="checkbox" value="scored" checked> Scored</label>
+              <label><input type="checkbox" value="error"> Error</label>
+              <label><input type="checkbox" value="unreadable"> Unreadable</label>
+              <label><input type="checkbox" value="duplicate"> Duplicate</label>
+            </div>
+          </fieldset>
+        </div>
+
+        <div class="card flush">
+          <div class="table-wrap">
+            <table id="table">
+              <thead id="thead"></thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
+          <div class="table-foot">
+            <span id="table-foot"></span>
+            <button id="more" class="btn secondary sm" type="button" hidden>Show more</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Score distribution</h2><span class="meta">Candidates per 10-point band</span></div>
+          <div id="dist" class="dist" aria-label="Number of candidates per score band"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<dialog id="detail" aria-labelledby="d-title"></dialog>
+
+<script src="/app.js"></script>
+</body>
+</html>
