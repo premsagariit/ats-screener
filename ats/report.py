@@ -13,9 +13,11 @@ STATUS_ORDER = {"scored": 0, "error": 1, "unreadable": 2, "duplicate": 3}
 
 def to_dataframe(results: list[ScoreResult], rubric: list[Criterion]) -> pd.DataFrame:
     rows = []
+    top = max((r.score for r in results if r.score is not None), default=0)  # normalized score = % of the top candidate's score
     for r in results:
         row = {
             "Score": r.score,
+            "Normalized score": round(r.score / top * 100, 1) if r.score is not None and top > 0 else None,
             "Candidate": r.candidate_name or r.filename,
             "File": r.filename,
             "Email": r.email,
@@ -60,7 +62,7 @@ def to_excel(df: pd.DataFrame, rubric: list[Criterion], jd: str) -> bytes:
 
         ws = xw.sheets["Ranked candidates"]
         ws.freeze_panes = "D2"
-        widths = {"Rank": 6, "Score": 7, "Candidate": 26, "File": 28, "Summary": 60, "Strengths": 45,
+        widths = {"Rank": 6, "Score": 7, "Normalized score": 11, "Candidate": 26, "File": 28, "Summary": 60, "Strengths": 45,
                   "Gaps": 45, "Red flags": 30, "Email": 28}
         from openpyxl.styles import Font, PatternFill
         from openpyxl.utils import get_column_letter

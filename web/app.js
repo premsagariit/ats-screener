@@ -245,7 +245,7 @@ function initResults() {
 }
 const sortVal = (r, key) => {
   if (key === "rank") return r.rank ?? 1e9;
-  if (key === "score") return r.score ?? -1;
+  if (key === "score" || key === "norm") return r.score ?? -1; // same order: norm is score / a constant
   if (key === "name") return (r.candidate_name || r.filename).toLowerCase();
   if (key === "status") return r.status;
   return r.criteria?.[key]?.score ?? -1;
@@ -256,7 +256,7 @@ function renderHead() {
     const aria = s.key === key ? ` aria-sort="${s.dir > 0 ? "ascending" : "descending"}"` : "";
     return `<th data-k="${esc(key)}"${aria} tabindex="0" scope="col">${label}${extra}</th>`;
   };
-  $("#thead").innerHTML = "<tr>" + th("rank", "Rank") + th("name", "Candidate") + th("score", "Score")
+  $("#thead").innerHTML = "<tr>" + th("rank", "Rank") + th("name", "Candidate") + th("score", "Score") + th("norm", "Normalized score")
     + state.used.map((c) => th(c.key, esc(c.name))).join("")
     + '<th scope="col" style="cursor:default">Summary</th>' + th("status", "Status") + "</tr>";
 }
@@ -291,7 +291,7 @@ function renderResults() {
   state.view = applyFilters();
   const shown = state.view.slice(0, state.limit);
   $("#tbody").innerHTML = shown.map((r, i) => rowHTML(r, i)).join("") ||
-    `<tr><td colspan="${state.used.length + 5}" class="muted">No candidates match these filters.</td></tr>`;
+    `<tr><td colspan="${state.used.length + 6}" class="muted">No candidates match these filters.</td></tr>`;
   $("#table-foot").textContent = `Showing ${shown.length} of ${state.view.length} (${state.results.length} total)`;
   $("#more").hidden = shown.length >= state.view.length;
 
@@ -301,19 +301,21 @@ function renderResults() {
   $("#dist").innerHTML = bins.map((n, i) => `<div style="height:${(n / mx) * 100}%" title="${i * 10}–${i * 10 + 10}: ${n}"><span>${n || ""}</span><em>${i * 10}</em></div>`).join("");
 }
 const band = (s) => (s >= state.f.th ? "hi" : s >= state.f.th * 0.75 ? "mid" : "lo");
+// % of the top candidate's score (over all scored results, not just the filtered rows)
+const norm = (s) => { const t = Math.max(0, ...state.results.map((r) => r.score ?? 0)); return t > 0 ? fmt(Math.round((s / t) * 1000) / 10) : "–"; };
 const fmt = (t) => (t % 1 ? t.toFixed(1) : t);
 function rowHTML(r, i) {
   const name = esc(r.candidate_name || r.filename);
   const flag = r.red_flags?.length ? `<span class="tag flag" title="${esc(r.red_flags.join("; "))}">Red flag</span>` : "";
   const cand = `<td class="cand"><b>${name}${flag}</b><span>${esc(r.filename)}</span></td>`;
   if (r.status !== "scored") {
-    return `<tr tabindex="0" data-i="${i}"><td class="rank">–</td>${cand}<td class="score">–</td>`
+    return `<tr tabindex="0" data-i="${i}"><td class="rank">–</td>${cand}<td class="score">–</td><td class="num">–</td>`
       + `${state.used.map(() => "<td></td>").join("")}<td class="sum"><span class="clamp">${esc(r.error)}</span></td><td><span class="tag ${r.status === "duplicate" ? "" : "bad"}">${esc(r.status)}</span></td></tr>`;
   }
   const items = state.used.map((c) => ({ ...c, pts: r.criteria[c.key]?.score ?? 0 }));
   const cells = items.map((c) => `<td class="num${c.pts ? "" : " zero"}">${c.pts}/${Math.floor(c.weight)}</td>`).join("");
   return `<tr tabindex="0" data-i="${i}"><td class="rank">#${r.rank}</td>${cand}`
-    + `<td class="score"><span class="pill ${band(r.score)}">${r.score}</span></td>${cells}`
+    + `<td class="score"><span class="pill ${band(r.score)}">${r.score}</span></td><td class="num">${norm(r.score)}</td>${cells}`
     + `<td class="sum"><span class="clamp">${esc(r.summary)}</span></td><td><span class="tag ok">Scored</span></td></tr>`;
 }
 

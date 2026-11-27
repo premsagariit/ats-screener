@@ -10,6 +10,7 @@ Providers:
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
 import random
@@ -151,7 +152,8 @@ class LLMClient:
     async def aclose(self):
         await self._http.aclose()
 
-    async def complete(self, system: str, user: str, parse: Callable[[str], Any] | None = None) -> Any:
+    async def complete(self, system: str, user: str, parse: Callable[[str], Any] | None = None,
+                       images: list[bytes] | None = None) -> Any:
         """One logical call with up to cfg.max_retries retries, exponential backoff and jitter.
 
         Retried: rate limits (429/529), server errors (5xx), timeouts/network errors, and, when `parse` is given,
@@ -163,7 +165,7 @@ class LLMClient:
         for attempt in range(retries + 1):
             wait = 0.0
             try:
-                raw = await self._complete_once(system, prompt)
+                raw = await self._complete_once(system, prompt, images or [])
                 return parse(raw) if parse else raw
             except LLMError as exc:
                 if not exc.retryable or attempt == retries:
@@ -192,21 +194,24 @@ class LLMClient:
             raise LLMError(f"HTTP {r.status_code}: {r.text[:400]}")
         return r.json()
 
-    async def _complete_once(self, system: str, user: str) -> str:
+    async def _complete_once(self, system: str, user: str, images: list[bytes]) -> str:
         c, base = self.cfg, self.cfg.resolved_base_url()
         if c.provider == "mock":
             return _mock_response(user)
 
-        entry = await self._limiter.acquire((len(system) + len(user)) // 3) if self._limiter else None
-        data, text = await self._request(c, base, system, user)
+        entry = await self._limiter.acquire((len(system) + len(user)) // 3 + 1600 * len(images)) if self._limiter else None
+        data, text = await self._request(c, base, system, user, images)
         if entry is not None:
             self._limiter.settle(entry, *_usage(data))
         return text
 
-    async def _request(self, c: LLMConfig, base: str, system: str, user: str) -> tuple[dict, str]:
+    async def _request(self, c: LLMConfig, base: str, system: str, user: str, images: list[bytes]) -> tuple[dict, str]:
+        b64 = [base64.b64encode(i).decode() for i in images]  # page renders are JPEG
         if c.provider == "anthropic":
             body = {"model": c.model, "max_tokens": c.max_tokens,  # no temperature: rejected on Claude 5 models
-                    "system": system, "messages": [{"role": "user", "content": user}]}
+                    "system": system, "messages": [{"role": "user", "content": [
+                        *({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": d}} for d in b64),
+                        {"type": "text", "text": user}]}]}
             body.update(_anthropic_reasoning(c))
             data = await self._post(
                 f"{base}/v1/messages",
@@ -220,7 +225,9 @@ class LLMClient:
             if c.api_key:
                 headers["authorization"] = f"Bearer {c.api_key}"
             payload = {"model": c.model, "temperature": c.temperature, "max_tokens": c.max_tokens, "seed": c.seed,
-                       "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                       "messages": [{"role": "system", "content": system}, {"role": "user", "content": [
+                           *({"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + d}} for d in b64),
+                           {"type": "text", "text": user}]}],
                        "response_format": {"type": "json_object"}}
             try:
                 data = await self._post(f"{base}/chat/completions", headers, payload)
@@ -237,7 +244,8 @@ class LLMClient:
                 f"{base}/models/{c.model}:generateContent",
                 {"content-type": "application/json", "x-goog-api-key": c.api_key},
                 {"systemInstruction": {"parts": [{"text": system}]},
-                 "contents": [{"role": "user", "parts": [{"text": user}]}],
+                 "contents": [{"role": "user", "parts": [
+                     *({"inlineData": {"mimeType": "image/jpeg", "data": d}} for d in b64), {"text": user}]}],
                  "generationConfig": {"temperature": c.temperature, "seed": c.seed, "maxOutputTokens": c.max_tokens,
                                       "responseMimeType": "application/json"}},
             )
