@@ -23,7 +23,8 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 from ats.llm import PROVIDERS, LLMConfig, env_limits  # noqa: E402
 from ats.parsing import dedupe, load_files  # noqa: E402
 from ats.report import to_dataframe, to_excel  # noqa: E402
-from ats.rubric import DEFAULT_JD, DEFAULT_RUBRIC, records_to_rubric, rubric_to_records  # noqa: E402
+from ats.rubric import DEFAULT_JD, DEFAULT_RUBRIC, records_to_rubric, rubric_fingerprint, rubric_to_records  # noqa: E402
+from ats.store import Store  # noqa: E402
 from ats.scorer import Cache, ScoreResult, generate_rubric, score_all  # noqa: E402
 
 ENV_KEYS = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY",
@@ -32,6 +33,7 @@ WEB = Path(__file__).parent / "web"
 
 app = FastAPI(title="Resume Screener")
 cache = Cache(os.environ.get("ATS_CACHE_PATH", ".ats_cache.sqlite"))
+store = Store(os.environ.get("ATS_DB_PATH", "ats_data.sqlite"))  # permanent record of runs, candidates, scores
 BATCHES: dict[str, list] = {}  # batch id -> parsed Resume objects (single-user local tool: kept in memory)
 JOBS: dict[str, dict] = {}
 
@@ -124,18 +126,35 @@ def with_ranks(results: list[ScoreResult]) -> list[dict]:
     return out
 
 
-async def run_job(job: dict, resumes, dups, rubric, jd: str, cfg: LLMConfig, concurrency: int):
+async def run_job(jid: str, job: dict, resumes, dups, rubric, jd: str, cfg: LLMConfig, concurrency: int,
+                  reuse: bool = False):
     t0 = time.time()
+    reused: list[ScoreResult] = []
+    base = 0  # resumes already settled from the database, counted before the model-scored ones
 
     def on_progress(done: int, total: int, res: ScoreResult):
         c = job["counts"]
         c[res.status] = c.get(res.status, 0) + 1
         c["cached"] += int(res.cached)
-        job["done"] = done
+        job["done"] = base + done
 
     try:
-        results = await score_all(resumes, jd, rubric, cfg, concurrency=concurrency, cache=cache,
-                                  on_progress=on_progress, should_stop=lambda: job["stop"])
+        if reuse:  # opt-in: take scores from earlier runs with the same job description and rubric
+            hits = await asyncio.to_thread(store.find_scores, [r.sha256 for r in resumes if r.ok], job["fp"])
+            todo = []
+            for r in resumes:
+                hit = hits.get(r.sha256) if r.ok else None
+                if hit:
+                    hit.filename, hit.cached = r.filename, True
+                    reused.append(hit)
+                    job["counts"]["scored"] += 1
+                    job["counts"]["cached"] += 1
+                else:
+                    todo.append(r)
+            resumes, base = todo, len(reused)
+            job["done"] = base
+        results = reused + await score_all(resumes, jd, rubric, cfg, concurrency=concurrency, cache=cache,
+                                           on_progress=on_progress, should_stop=lambda: job["stop"])
         results += [ScoreResult(d.filename, d.sha256, "duplicate", error="Same text as another uploaded resume")
                     for d in dups]
         job["results"] = results
@@ -143,6 +162,11 @@ async def run_job(job: dict, resumes, dups, rubric, jd: str, cfg: LLMConfig, con
     except Exception as exc:  # noqa: BLE001
         job["status"], job["error"] = "error", str(exc)[:300]
     job["secs"] = time.time() - job["t0"] if "t0" in job else time.time() - t0
+    if job["results"]:
+        try:
+            await asyncio.to_thread(store.save_run, jid, job, with_ranks(job["results"]))
+        except Exception as exc:  # noqa: BLE001  a storage problem must not lose the on-screen results
+            job["error"] = f"Results shown but not saved to the database: {exc}"[:300]
 
 
 @app.post("/api/screen")
@@ -169,15 +193,26 @@ async def screen(body: dict = Body(...)):
     jid = uuid.uuid4().hex
     job = {"status": "running", "total": len(resumes), "done": 0, "stop": False, "t0": time.time(), "secs": 0,
            "counts": {"scored": 0, "error": 0, "unreadable": 0, "cached": 0}, "results": [], "rubric": rubric,
-           "jd": jd, "model": f"{PROVIDERS[cfg.provider]['label']} · {cfg.model}", "error": ""}
+           "jd": jd, "fp": rubric_fingerprint(rubric, jd), "model": f"{PROVIDERS[cfg.provider]['label']} · {cfg.model}", "error": ""}
     JOBS[jid] = job
-    job["task"] = asyncio.create_task(run_job(job, resumes, dups, rubric, jd, cfg, conc))
+    job["task"] = asyncio.create_task(run_job(jid, job, resumes, dups, rubric, jd, cfg, conc,
+                                    bool(body.get("reuse"))))
     return {"job": jid}
+
+
+def get_job(jid: str) -> dict | None:
+    """A live job from memory, else a finished run from the database (so past runs open and export too)."""
+    return JOBS.get(jid) or store.load_run(jid)
+
+
+@app.get("/api/runs")
+def list_runs():
+    return store.list_runs()
 
 
 @app.get("/api/jobs/{jid}")
 def job_state(jid: str):
-    job = JOBS.get(jid)
+    job = get_job(jid)
     if not job:
         raise HTTPException(404, "Unknown job")
     out = {k: job[k] for k in ("status", "total", "done", "counts", "model", "error")}
@@ -197,7 +232,7 @@ def stop_job(jid: str):
 
 @app.get("/api/jobs/{jid}/export.{ext}")
 def export(jid: str, ext: str):
-    job = JOBS.get(jid)
+    job = get_job(jid)
     if not job or job["status"] == "running" or ext not in ("xlsx", "csv"):
         raise HTTPException(404, "Nothing to export")
     df = to_dataframe(job["results"], job["rubric"])

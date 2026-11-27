@@ -27,6 +27,7 @@
       <button role="tab" id="t-brief" aria-controls="tab-brief" aria-selected="true"><span class="step">1</span>Job &amp; rubric</button>
       <button role="tab" id="t-screen" aria-controls="tab-screen" aria-selected="false"><span class="step">2</span>Upload &amp; screen</button>
       <button role="tab" id="t-results" aria-controls="tab-results" aria-selected="false" disabled><span class="step">3</span>Ranked results</button>
+      <button role="tab" id="t-history" aria-controls="tab-history" aria-selected="false"><span class="step">&#8635;</span>Past runs</button>
     </nav>
 
     <div class="side-foot">
@@ -118,6 +119,12 @@
             <small id="conc-help">How many resumes are scored at the same time. Requests are also paced to stay
               under your account's per-minute limits, so very high values mostly queue.</small>
           </label>
+          <label class="check-row">
+            <input id="reuse" type="checkbox">
+            <span><b>Reuse scores from past runs</b><small>Skip the AI for resumes already scored in an earlier run with the same
+              job description and rubric, and take their saved scores from the database. Off: every resume is scored fresh
+              (the faster score cache still applies).</small></span>
+          </label>
           <p id="b-estimate" class="note"></p>
           <div class="actions">
             <button id="run" class="btn primary" type="button">Screen and rank resumes</button>
@@ -134,6 +141,26 @@
         <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="bar-fill"></i></div>
         <p id="progress-text" class="mono progress-text"></p>
         <p id="progress-counts" class="note"></p>
+      </div>
+    </section>
+
+    <!-- ============ Past runs ============ -->
+    <section id="tab-history" role="tabpanel" aria-labelledby="t-history" hidden>
+      <header class="page-head">
+        <div>
+          <h1>Past runs</h1>
+          <p>Every finished screening run is saved. Open one to see its ranked results and download CSV or Excel.</p>
+        </div>
+        <div class="actions"><button id="h-refresh" class="btn secondary" type="button">Refresh</button></div>
+      </header>
+      <div id="h-empty" class="empty" hidden><p><b>No saved runs yet</b></p><p>Finished runs appear here.</p></div>
+      <div id="h-card" class="card flush" hidden>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Date</th><th scope="col">Model</th><th scope="col">Job description</th><th scope="col">Scored</th><th scope="col">Top score</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Open</span></th></tr></thead>
+            <tbody id="h-body"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 

@@ -4,3 +4,5 @@ myenv/
 __pycache__/
 *.pyc
 .ats_cache.sqlite
+
+ats_data.sqlite

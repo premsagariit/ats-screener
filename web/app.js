@@ -56,10 +56,11 @@ function ruler(items, cls = "") {
 
 /* ---------------------------------------------------------------- tabs */
 function showTab(name) {
-  for (const t of ["brief", "screen", "results"]) {
+  for (const t of ["brief", "screen", "results", "history"]) {
     $("#t-" + t).setAttribute("aria-selected", String(t === name));
     $("#tab-" + t).hidden = t !== name;
   }
+  if (name === "history") loadHistory();
 }
 $$(".tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.id.slice(2))));
 $(".tabs").addEventListener("keydown", (e) => {
@@ -201,7 +202,7 @@ $("#run").addEventListener("click", async () => {
   try {
     const { job } = await api("/api/screen", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ batch: state.batch.batch, jd: state.jd, rubric: state.rubric, concurrency: +$("#conc-num").value }),
+      body: JSON.stringify({ batch: state.batch.batch, jd: state.jd, rubric: state.rubric, concurrency: +$("#conc-num").value, reuse: $("#reuse").checked }),
     });
     state.job = job;
     $("#run").disabled = true; $("#progress").hidden = false; $("#stop").disabled = false;
@@ -220,11 +221,12 @@ async function pollJob() {
   $(".bar").setAttribute("aria-valuenow", pct);
   $("#progress-text").textContent = `${j.done}/${j.total} screened · ${rate.toFixed(1)}/s` + (j.status === "running" ? ` · about ${eta.toFixed(1)} min left` : "");
   const c = j.counts;
-  $("#progress-counts").textContent = `${c.scored} scored (${c.cached} from cache) · ${c.error} errors · ${c.unreadable} unreadable`;
+  $("#progress-counts").textContent = `${c.scored} scored (${c.cached} from cache or past runs) · ${c.error} errors · ${c.unreadable} unreadable`;
   if (j.status === "running") return;
   clearInterval(state.poll);
   $("#run").disabled = false;
   if (j.status === "error") { banner("Screening failed: " + j.error); return; }
+  state.fromHistory = false;
   state.results = j.results; state.used = j.rubric;
   const errs = j.results.filter((r) => r.status === "error");
   $("#run-meta").textContent = `Sorted by total score · ${j.model} · run time ${(j.elapsed / 60).toFixed(1)} min` + (j.status === "stopped" ? " · stopped early" : "");
@@ -371,7 +373,7 @@ function openDetail(i) {
     <div class="sheet-top">
       <span class="mono">${r.rank ? "Rank #" + r.rank : esc(r.status)} · ${i + 1} of ${state.view.length}</span>
       <span class="actions">
-        ${state.batch ? `<a class="btn secondary sm" target="_blank" rel="noopener" href="/api/resumes/${encodeURIComponent(state.batch.batch)}/file?name=${encodeURIComponent(r.filename)}&sha=${encodeURIComponent(r.sha256 || "")}">View resume</a>` : ""}
+        ${state.batch && !state.fromHistory ? `<a class="btn secondary sm" target="_blank" rel="noopener" href="/api/resumes/${encodeURIComponent(state.batch.batch)}/file?name=${encodeURIComponent(r.filename)}&sha=${encodeURIComponent(r.sha256 || "")}">View resume</a>` : ""}
         <button class="btn secondary sm" type="button" id="d-prev" ${i === 0 ? "disabled" : ""}>Previous</button>
         <button class="btn secondary sm" type="button" id="d-next" ${i >= state.view.length - 1 ? "disabled" : ""}>Next</button>
         <button class="btn secondary sm" type="button" id="d-close">Close</button>
@@ -432,3 +434,31 @@ $("#side-toggle").addEventListener("click", () => {
   try { localStorage.setItem("side-collapsed", c ? "1" : ""); } catch { /* storage blocked */ }
 });
 try { if (localStorage.getItem("side-collapsed")) $("#side-toggle").click(); } catch { /* storage blocked */ }
+
+/* ---------------------------------------------------------------- past runs (saved in the database) */
+async function loadHistory() {
+  let runs = [];
+  try { runs = await api("/api/runs"); } catch (err) { banner(err.message); }
+  $("#h-empty").hidden = runs.length > 0; $("#h-card").hidden = !runs.length;
+  $("#h-body").innerHTML = runs.map((r) => `<tr>
+    <td>${esc(new Date(r.started * 1000).toLocaleString())}</td><td>${esc(r.model)}</td>
+    <td class="jd" title="${esc(r.jd)}">${esc(r.jd)}</td>
+    <td class="num">${r.scored} of ${r.rows}</td><td class="num">${r.top ?? "–"}</td>
+    <td><span class="tag ${r.status === "done" ? "ok" : ""}">${esc(r.status)}</span></td>
+    <td><button class="btn secondary sm" type="button" data-run="${esc(r.id)}">Open</button></td></tr>`).join("");
+}
+$("#h-body").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-run]");
+  if (!b) return;
+  banner("");
+  try {
+    const j = await api("/api/jobs/" + b.dataset.run);
+    state.job = b.dataset.run; state.fromHistory = true;
+    state.results = j.results; state.used = j.rubric;
+    $("#run-meta").textContent = `Saved run · ${j.model} · ${(j.elapsed / 60).toFixed(1)} min` + (j.status === "stopped" ? " · stopped early" : "");
+    $("#t-results").disabled = false;
+    initResults();
+    showTab("results");
+  } catch (err) { banner("Could not open that run: " + err.message); }
+});
+$("#h-refresh").addEventListener("click", loadHistory);
