@@ -96,6 +96,17 @@ async def add_resumes(files: list[UploadFile] = File(...), batch: str | None = F
     return batch_stats(bid)
 
 
+@app.get("/api/resumes/{bid}/file")
+def resume_file(bid: str, name: str, sha: str = ""):
+    """Serves an uploaded resume as-is (PDFs/text open in the browser, DOCX downloads)."""
+    r = next((x for x in BATCHES.get(bid, []) if x.filename == name and x.raw and (not sha or x.sha256 == sha)), None)
+    if not r:
+        raise HTTPException(404, "Resume file not found (uploads are kept in memory until the server restarts)")
+    ctype = {".pdf": "application/pdf", ".txt": "text/plain; charset=utf-8"}.get(Path(name).suffix.lower(), "application/octet-stream")
+    return Response(r.raw, media_type=ctype, headers={"Content-Disposition": f'inline; filename="{uuid.uuid4().hex[:8]}{Path(name).suffix}"',
+                                                       "X-Content-Type-Options": "nosniff"})
+
+
 @app.delete("/api/resumes/{bid}")
 def drop_batch(bid: str):
     BATCHES.pop(bid, None)

@@ -290,3 +290,17 @@ dialog::backdrop { background: rgba(16, 24, 40, 0.5); backdrop-filter: blur(2px)
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ---------------- collapsible sidebar ---------------- */
+.side-toggle { appearance: none; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 8px; width: 34px; height: 34px; display: grid; place-items: center; cursor: pointer; flex: none; margin-left: auto; order: 2; }
+.side-toggle:hover { background: var(--subtle); color: var(--ink); }
+.shell { transition: grid-template-columns 0.2s ease; }
+.shell.collapsed { grid-template-columns: 64px minmax(0, 1fr); }
+.shell.collapsed .brand-text, .shell.collapsed .mark, .shell.collapsed .nav-label, .shell.collapsed .side-foot { display: none; }
+.shell.collapsed .side { padding: 1.25rem 0.5rem; align-items: center; }
+.shell.collapsed .brand { padding: 0; }
+.shell.collapsed .side-toggle { margin: 0; }
+.shell.collapsed .tabs button { justify-content: center; font-size: 0; gap: 0; padding: 0.55rem 0; }
+.shell.collapsed .tabs button .step { font-size: 0.72rem; }
+.shell.collapsed .tabs { width: 100%; }
+.slider input[type="number"] { width: 5rem; margin-left: 0.5rem; }

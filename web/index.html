@@ -15,6 +15,7 @@
   <!-- ================= sidebar ================= -->
   <aside class="side">
     <div class="brand">
+      <button id="side-toggle" class="side-toggle" type="button" aria-expanded="true" title="Collapse or expand sidebar" aria-label="Toggle sidebar"><svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h14M3 10h14M3 15h14"/></svg></button>
       <span class="mark" aria-hidden="true">
         <svg viewBox="0 0 20 20" width="20" height="20"><rect x="2" y="9" width="7" height="3" rx="1"/><rect x="10" y="9" width="4" height="3" rx="1" opacity=".7"/><rect x="15" y="9" width="3" height="3" rx="1" opacity=".45"/></svg>
       </span>
@@ -112,7 +113,7 @@
         <div class="card">
           <details id="b-bad" class="bad-files" hidden><summary></summary><ul id="b-bad-list"></ul></details>
           <label class="field slider">
-            <span>Parallel requests <output id="conc-out">20</output></span>
+            <span>Parallel requests <input id="conc-num" type="number" min="1" max="50" step="1" value="20" aria-label="Parallel requests (number)"></span>
             <input id="conc" type="range" min="1" max="50" step="1" value="20" aria-describedby="conc-help">
             <small id="conc-help">How many resumes are scored at the same time. Requests are also paced to stay
               under your account's per-minute limits, so very high values mostly queue.</small>

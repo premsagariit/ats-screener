@@ -190,7 +190,6 @@ picker.addEventListener("change", () => { uploadFiles(picker.files); picker.valu
 ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
 drop.addEventListener("drop", (e) => uploadFiles(e.dataTransfer.files));
-$("#conc").addEventListener("input", (e) => { $("#conc-out").textContent = e.target.value; });
 $("#clear-batch").addEventListener("click", async () => {
   if (state.batch) await fetch("/api/resumes/" + state.batch.batch, { method: "DELETE" });
   state.batch = null; renderBatch();
@@ -202,7 +201,7 @@ $("#run").addEventListener("click", async () => {
   try {
     const { job } = await api("/api/screen", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ batch: state.batch.batch, jd: state.jd, rubric: state.rubric, concurrency: +$("#conc").value }),
+      body: JSON.stringify({ batch: state.batch.batch, jd: state.jd, rubric: state.rubric, concurrency: +$("#conc-num").value }),
     });
     state.job = job;
     $("#run").disabled = true; $("#progress").hidden = false; $("#stop").disabled = false;
@@ -258,7 +257,7 @@ function renderHead() {
     return `<th data-k="${esc(key)}"${aria} tabindex="0" scope="col">${label}${extra}</th>`;
   };
   $("#thead").innerHTML = "<tr>" + th("rank", "Rank") + th("name", "Candidate") + th("score", "Score")
-    + state.used.map((c) => th(c.key, esc(c.name), ` <span class="w">/${Math.floor(c.weight)}</span>`)).join("")
+    + state.used.map((c) => th(c.key, esc(c.name))).join("")
     + '<th scope="col" style="cursor:default">Summary</th>' + th("status", "Status") + "</tr>";
 }
 function applyFilters() {
@@ -314,7 +313,7 @@ function rowHTML(r, i) {
   const items = state.used.map((c) => ({ ...c, pts: r.criteria[c.key]?.score ?? 0 }));
   const cells = items.map((c) => `<td class="num${c.pts ? "" : " zero"}">${c.pts}/${Math.floor(c.weight)}</td>`).join("");
   return `<tr tabindex="0" data-i="${i}"><td class="rank">#${r.rank}</td>${cand}`
-    + `<td class="score"><span class="pill ${band(r.score)}">${r.score}</span>${ruler(items, "mini")}</td>${cells}`
+    + `<td class="score"><span class="pill ${band(r.score)}">${r.score}</span></td>${cells}`
     + `<td class="sum"><span class="clamp">${esc(r.summary)}</span></td><td><span class="tag ok">Scored</span></td></tr>`;
 }
 
@@ -350,7 +349,6 @@ function openDetail(i) {
     <div class="score-box">
       <div>
         <div class="big-score">${r.score}<small> / ${fmt(total(state.used))}</small></div>
-        ${ruler(items, "big")}
       </div>
       <span class="pill ${band(r.score)}">${r.score >= state.f.th ? "Shortlist" : "Below threshold"}</span>
     </div>
@@ -371,6 +369,7 @@ function openDetail(i) {
     <div class="sheet-top">
       <span class="mono">${r.rank ? "Rank #" + r.rank : esc(r.status)} · ${i + 1} of ${state.view.length}</span>
       <span class="actions">
+        ${state.batch ? `<a class="btn secondary sm" target="_blank" rel="noopener" href="/api/resumes/${encodeURIComponent(state.batch.batch)}/file?name=${encodeURIComponent(r.filename)}&sha=${encodeURIComponent(r.sha256 || "")}">View resume</a>` : ""}
         <button class="btn secondary sm" type="button" id="d-prev" ${i === 0 ? "disabled" : ""}>Previous</button>
         <button class="btn secondary sm" type="button" id="d-next" ${i >= state.view.length - 1 ? "disabled" : ""}>Next</button>
         <button class="btn secondary sm" type="button" id="d-close">Close</button>
@@ -409,11 +408,25 @@ $("#clear-cache").addEventListener("click", async () => {
   if (stale) banner("The default job description or rubric changed in the code, so it has been reloaded.", true);
   $("#jd").value = state.jd;
   $("#gen-rubric").disabled = !state.cfg.can_generate;
-  const cc = state.cfg.concurrency, conc = $("#conc");
-  if (cc) { conc.min = cc.min; conc.max = cc.max; conc.value = cc.default; $("#conc-out").textContent = cc.default; }
+  const cc = state.cfg.concurrency, conc = $("#conc"), num2 = $("#conc-num");
+  if (cc) { conc.min = cc.min; conc.max = cc.max; conc.value = cc.default; num2.min = cc.min; num2.max = cc.max; num2.value = cc.default; }
   const chip = $("#model-chip");
   chip.hidden = false;
   chip.innerHTML = `<span class="k">Model</span><span class="v">${esc(state.cfg.model)}</span><span class="s">${esc(state.cfg.label)} · ${esc(state.cfg.samples)}× per resume</span>`;
   renderCriteria();
   if (!state.cfg.ready) banner("No API key found. Set LLM_API_KEY in .env and restart the server to enable screening.");
 })();
+
+/* slider <-> number box stay in sync; typed values are clamped to the slider range */
+$("#conc").addEventListener("input", (e) => { $("#conc-num").value = e.target.value; });
+$("#conc-num").addEventListener("change", (e) => {
+  const s = $("#conc"), v = Math.min(+s.max, Math.max(+s.min, Math.round(+e.target.value) || +s.min));
+  e.target.value = s.value = v;
+});
+/* collapsible sidebar, remembered across reloads */
+$("#side-toggle").addEventListener("click", () => {
+  const c = document.querySelector(".shell").classList.toggle("collapsed");
+  $("#side-toggle").setAttribute("aria-expanded", String(!c));
+  try { localStorage.setItem("side-collapsed", c ? "1" : ""); } catch { /* storage blocked */ }
+});
+try { if (localStorage.getItem("side-collapsed")) $("#side-toggle").click(); } catch { /* storage blocked */ }

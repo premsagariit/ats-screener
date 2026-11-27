@@ -33,7 +33,9 @@ exactly meets what the role needs. Choose exactly one of these five levels per c
 - Reward demonstrated work (projects, internships, research, deployments) over keyword lists.
 - Do not look for exact keywords. Infer the underlying technology from what each project/job actually did (e.g. "chat with PDFs" implies RAG and embeddings; "served model behind an endpoint" implies an API layer), and credit it. A skill that appears ONLY in a skills section should also be considered but had the lower score if it is not mentioned in any demonstarted work; the same skill backed by a project or experience entry earns the higher bands. Skills section plus project evidence scores highest. EXCEPTION, only for the "development" criterion: a programming language named in the skills section OR in any work/project already earns the higher bands (a skills-section mention is enough; do not apply the skills-only cap there).
 - For the ownership criterion, read each project/experience entry for the candidate's own role: first-person or clearly attributed contributions, how many stages they covered end to end, decisions they made, and the scope and users or deployment. Team projects with no stated personal role or only vague wording ("worked on", "helped", "part of a team") earn little; do not assume ownership that the text does not state.
-- For the credibility/coherence criterion, judge only whether each project's technology fits what it claims to do. Do not verify metrics or dates.
+- Today is {today}. Any date up to and including this month is valid, never flag it as a future date.
+- For the credibility/coherence criterion, judge (a) whether each project's technology fits what it claims to do, (b) whether each metric is named, measurable, and plausible for that task and data size (a metric must say what was measured, on what, versus what baseline; round or extreme numbers with no method, e.g. "99% accuracy", "10x faster", "improved efficiency by 80%", are suspect), and (c) whether the claimed work is feasible in the stated duration and employer context. Judge feasibility with today's AI coding tools in mind, and use employer SCALE only as a plausibility signal, never as prestige: large companies often give interns narrow, scoped tasks with slow access/approval cycles, so broad end-to-end production claims in 2 months are less plausible there; startups often give interns wide ownership, so heavy scope is more plausible. Implausible or unverifiable claims lower the score and go in red_flags; do not penalise modest, well-explained claims.
+- For the experience criterion, the job title is irrelevant (any role, e.g. "Software Intern" or "Data Analyst", may count). Judge by the work actually done: score the AI/ML/GenAI-relevant part of it, and give little credit for non-AI work.
 - Judge only skills and projects and experience. Ignore and never let these affect scores: name, gender, age, religion, \
 caste, nationality, marital status, photo, address, and the prestige of the college or employer.
 - Do not invent facts. Evidence must paraphrase or quote what the resume actually says.
@@ -187,7 +189,7 @@ async def score_all(
     on_progress: Callable[[int, int, ScoreResult], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
 ) -> list[ScoreResult]:
-    system = SYSTEM_PROMPT.format(jd=jd.strip())
+    system = SYSTEM_PROMPT.format(jd=jd.strip(), today=time.strftime("%B %Y"))
     rubric_txt = _rubric_block(rubric)
     fp = rubric_fingerprint(rubric, jd)
     client = LLMClient(cfg)

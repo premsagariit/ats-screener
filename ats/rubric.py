@@ -23,17 +23,18 @@ DEFAULT_RUBRIC: list[Criterion] = [
               "Real use of LLMs, RAG, embeddings, prompting, fine-tuning not just making API calls instead a system that uses it to create impact." 
              "Infer it from what the projects/work actually do (e.g. a document Q&A app implies retrieval + embeddings, vector embeddings and LLM API via RAG), even if not named."),
     Criterion("experience", "Experience", 20,
-              "Hackathons, open source, papers, internships that are related to AI/ML, LLM finetuning, LLM research, AI application."),
+              "Any role or title (not just 'AI Engineer Intern') counts if the work actually done is AI/ML/GenAI-relevant; judge the work, not the title. Includes LLM finetuning, LLM research, AI application, Hackathons, open source, papers."),
     Criterion("agents", "Agent / orchestration frameworks", 15,
               "Projects that involve agentic ai frameworks like LangChain/LangGraph, LlamaIndex, Semantic kernal, Bedrock, Vertex, tool calling, fine-tuning small models. Credit projects whose design needs orchestration/tool use, not just a listed library."),
     Criterion("credibility", "Project credibility & logical coherence", 14,
-              "Do the projects hold together technically? Does the metrics specified are appropriate to measure the outcome of the project? Does evaluations are present "),
+              "Do projects hold together technically? Are metrics appropriate for the task, clearly defined (what, on what data, vs what baseline) and realistic rather than just a big number? Are evaluations present? "
+              "Is the claimed work feasible in the stated duration given the employer's scale (big firms: narrow scoped intern work; startups: broad ownership) and modern AI coding tools? Implausible scope/metrics score low."),
     Criterion("mlops", "Deployment & engineering practice", 12,
-              "Docker, cloud, Git, CI, live demo links - shown by how projects were shipped."),
+              "Docker, cloud, Git, live demo links [Not mandatory] - shown by how projects were shipped."),
     Criterion("fundamentals_ml", "CS & ML fundamentals", 8,
               "DSA, ML/DL coursework and projects"),
     Criterion("development", "Python & full-stack build ability", 6,
-              "Any programmaing language (like Python) plus a UI (any framework: Streamlit, Flask, React, Next.js, etc.) and an API layer (Rest API, FASTAPI, etc) actually built in a project or job. A programming language listed in the skills section OR used in any work/project already earns a higher score here (a skills-section mention is enough)."),
+              "Any programmaing language (like Python) and an API layer (Rest API, FASTAPI, etc) actually built in a project or job. A programming language listed in the skills section OR used in any work/project already earns a higher score here (a skills-section mention is enough)."),
     Criterion("preferred", "Preferred extras", 5,
               "Multimodal, inference optimisation, health/insurance domain."),
 ]

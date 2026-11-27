@@ -5,7 +5,7 @@ import hashlib
 import io
 import re
 import zipfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import PurePosixPath
 
 SUPPORTED_EXT = {".pdf", ".docx", ".txt", ".md"}
@@ -19,6 +19,7 @@ class Resume:
     sha256: str
     error: str | None = None
     warnings: list[str] = field(default_factory=list)
+    raw: bytes = field(default=b"", repr=False)  # original file bytes, so the UI can open the resume
 
     @property
     def ok(self) -> bool:
@@ -88,11 +89,12 @@ def load_files(files: list[tuple[str, bytes]]) -> list[Resume]:
                         if info.is_dir() or inner.name.startswith((".", "~$")) or "__MACOSX" in inner.parts:
                             continue
                         if inner.suffix.lower() in SUPPORTED_EXT:
-                            out.append(extract_text(inner.name, zf.read(info)))
+                            data_in = zf.read(info)
+                            out.append(replace(extract_text(inner.name, data_in), raw=data_in))
             except zipfile.BadZipFile:
                 out.append(Resume(name, "", "", error="Corrupt ZIP archive"))
         else:
-            out.append(extract_text(name, data))
+            out.append(replace(extract_text(name, data), raw=data))
     return out
 
 
