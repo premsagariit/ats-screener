@@ -42,14 +42,38 @@ def _pdf_text(data: bytes) -> str:
     return res.markdown
 
 
+def _md_table(table) -> str:
+    rows = []
+    for row in table.rows:
+        cells, last = [], None
+        for c in row.cells:
+            if c._tc is last:  # merged cells repeat the same cell object; keep one
+                continue
+            last = c._tc
+            cells.append(" ".join(c.text.split()).replace("|", "\\|"))
+        if any(cells):
+            rows.append(cells)
+    if not rows:
+        return ""
+    n = max(map(len, rows))
+    rows = [r + [""] * (n - len(r)) for r in rows]
+    lines = ["| " + " | ".join(r) + " |" for r in rows]
+    lines.insert(1, "|" + " --- |" * n)  # first row is used as the header
+    return "\n".join(lines)
+
+
 def _docx_text(data: bytes) -> str:
     import docx
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
 
     doc = docx.Document(io.BytesIO(data))
-    parts = [p.text for p in doc.paragraphs]
-    for table in doc.tables:  # many resume templates put content in tables
-        for row in table.rows:
-            parts.append(" | ".join(cell.text for cell in row.cells))
+    parts = []
+    for el in doc.element.body.iterchildren():  # document order, so tables stay under their headings
+        if el.tag.endswith("}p"):
+            parts.append(Paragraph(el, doc).text)
+        elif el.tag.endswith("}tbl"):
+            parts.append("\n" + _md_table(Table(el, doc)) + "\n")
     return "\n".join(parts)
 
 
