@@ -18,7 +18,10 @@ from .llm import LLMClient, LLMConfig, LLMError
 from .parsing import Resume
 from .rubric import Criterion, rubric_fingerprint
 
-PROMPT_VERSION = "v13"  # bumped: gaps limited to rubric shortfalls
+PROMPT_VERSION = "v14"  # bumped: education/grades/internship details extracted
+# Profile details extracted (not scored): key -> column label used in the exports and the results table.
+DETAILS = {"highest_degree": "Highest education", "department": "Department", "grade_10th": "10th grade",
+           "grade_12th": "12th grade", "degree_grade": "Degree grade", "latest_internship": "Latest internship"}
 # Discrete score levels (fraction of a criterion's weight). Snapping in code removes small run-to-run wobble.
 LEVELS = (0, 0.25, 0.55, 0.85, 1.0)
 
@@ -68,6 +71,14 @@ Return JSON exactly in this shape:
   "phone": "string or empty",
   "current_or_latest_role": "string or empty",
   "total_experience_years": number,
+  "details": {{
+    "highest_degree": "highest degree as written, e.g. B.Tech, M.Tech, B.Sc, MBA, PhD; empty if not stated",
+    "department": "department / branch / major of that degree, e.g. Computer Science; empty if not stated",
+    "grade_10th": "10th / SSC / secondary result exactly as written (CGPA or %); empty if not stated",
+    "grade_12th": "12th / HSC / senior secondary or diploma result exactly as written; empty if not stated",
+    "degree_grade": "CGPA / GPA / % of the highest degree exactly as written; empty if not stated",
+    "latest_internship": "company of the most recent INTERNSHIP only (not teaching assistant, campus, club, freelance or full-time roles); empty if none"
+  }},
   "criteria": {{ "<key>": {{"evidence": "one short sentence citing the resume", "score": 0 to that criterion's weight}} }},
   "summary": "2-3 sentence assessment of fit for this role",
   "strengths": ["up to 4 short bullets"],
@@ -98,6 +109,7 @@ class ScoreResult:
     red_flags: list = field(default_factory=list)
     error: str = ""
     cached: bool = False
+    details: dict = field(default_factory=dict)  # DETAILS key -> extracted text
 
 
 # ---------------------------------------------------------------- cache
@@ -175,6 +187,8 @@ def build_result(resume: Resume, data: dict, rubric: list[Criterion]) -> ScoreRe
         experience_years=_num(exp) if exp not in (None, "") else None,
         summary=str(data.get("summary") or ""), strengths=_list(data.get("strengths")),
         gaps=_list(data.get("gaps")), red_flags=_list(data.get("red_flags")),
+        details={k: str((data.get("details") or {}).get(k) or "").strip() for k in DETAILS}
+        if isinstance(data.get("details"), dict) else {},
     )
 
 
@@ -257,7 +271,9 @@ def score_schema(rubric: list[Criterion]) -> dict:
                            for c in rubric}}
     props = {"candidate_name": s, "email": s, "phone": s, "current_or_latest_role": s,
              "total_experience_years": {"type": "number"}, "criteria": crit, "summary": s,
-             "strengths": arr, "gaps": arr, "red_flags": arr}
+             "strengths": arr, "gaps": arr, "red_flags": arr,
+             "details": {"type": "object", "additionalProperties": False, "required": list(DETAILS),
+                         "properties": {k: s for k in DETAILS}}}
     return {"type": "object", "additionalProperties": False, "required": list(props), "properties": props}
 
 

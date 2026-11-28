@@ -6,7 +6,7 @@ import io
 import pandas as pd
 
 from .rubric import Criterion
-from .scorer import ScoreResult
+from .scorer import DETAILS, ScoreResult
 
 STATUS_ORDER = {"scored": 0, "error": 1, "unreadable": 2, "duplicate": 3}
 
@@ -22,8 +22,8 @@ def to_dataframe(results: list[ScoreResult], rubric: list[Criterion]) -> pd.Data
             "Roll number": r.email.split("@")[0].strip(),  # the part of the email before "@"
             "File": r.filename,
             "Email": r.email,
-            "Latest role": r.role,
             "Exp (yrs)": r.experience_years,
+            **{label: r.details.get(k, "") for k, label in DETAILS.items()},
         }
         for c in rubric:
             row[c.name] = (r.criteria.get(c.key) or {}).get("score")
@@ -52,7 +52,8 @@ def to_dataframe(results: list[ScoreResult], rubric: list[Criterion]) -> pd.Data
 def to_excel(df: pd.DataFrame, rubric: list[Criterion], jd: str) -> bytes:
     buf = io.BytesIO()
     out = df.copy()
-    for c in rubric:  # "points/weight" as text, e.g. 12/20 (Excel would otherwise read it as a date)
+    shown = [c for c in rubric if c.name in df.columns]  # the user may have hidden some criteria columns
+    for c in shown:  # "points/weight" as text, e.g. 12/20 (Excel would otherwise read it as a date)
         out[c.name] = out[c.name].map(lambda v, w=int(c.weight): "" if pd.isna(v) else f"{int(v)}/{w}")
     with pd.ExcelWriter(buf, engine="openpyxl") as xw:
         out.to_excel(xw, sheet_name="Ranked candidates", index=False)
@@ -61,7 +62,7 @@ def to_excel(df: pd.DataFrame, rubric: list[Criterion], jd: str) -> bytes:
         pd.DataFrame({"Job description": jd.splitlines()}).to_excel(xw, sheet_name="Job description", index=False)
 
         ws = xw.sheets["Ranked candidates"]
-        ws.freeze_panes = "D2"
+        ws.freeze_panes = "A2"  # header row only: the first columns depend on the user's selection
         widths = {"Rank": 6, "Score": 7, "Normalized score": 11, "Candidate": 26, "File": 28, "Summary": 60, "Strengths": 45,
                   "Gaps": 45, "Red flags": 30, "Email": 28}
         from openpyxl.styles import Font, PatternFill
@@ -71,7 +72,7 @@ def to_excel(df: pd.DataFrame, rubric: list[Criterion], jd: str) -> bytes:
             cell = ws.cell(row=1, column=idx)
             cell.font = Font(bold=True, color="FFFFFF")
             cell.fill = PatternFill("solid", fgColor="1F4E79")
-        for c in rubric:  # text format so Excel keeps "12/20" as typed, even if the cell is edited
+        for c in shown:  # text format so Excel keeps "12/20" as typed, even if the cell is edited
             col = list(df.columns).index(c.name) + 1
             for row in range(2, ws.max_row + 1):
                 ws.cell(row=row, column=col).number_format = "@"

@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile  # noqa: E402
+from fastapi import Body, FastAPI, File, Form, HTTPException, Query, UploadFile  # noqa: E402
 from fastapi.responses import Response  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
@@ -25,7 +25,7 @@ from ats.parsing import dedupe, load_files  # noqa: E402
 from ats.report import to_dataframe, to_excel  # noqa: E402
 from ats.rubric import DEFAULT_JD, DEFAULT_RUBRIC, records_to_rubric, rubric_fingerprint, rubric_to_records  # noqa: E402
 from ats.store import Store  # noqa: E402
-from ats.scorer import Cache, ScoreResult, generate_rubric, score_all  # noqa: E402
+from ats.scorer import DETAILS, Cache, ScoreResult, generate_rubric, score_all  # noqa: E402
 
 ENV_KEYS = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY",
             "compatible": "OPENAI_COMPATIBLE_API_KEY"}
@@ -58,7 +58,8 @@ def config():
     c = make_cfg()
     return {"provider": c.provider, "label": PROVIDERS[c.provider]["label"], "model": c.model, "samples": c.samples,
             "ready": c.provider in ("mock", "compatible") or bool(c.api_key), "can_generate": c.provider != "mock",
-            "jd": DEFAULT_JD, "rubric": rubric_to_records(DEFAULT_RUBRIC), "concurrency": CONCURRENCY}
+            "jd": DEFAULT_JD, "rubric": rubric_to_records(DEFAULT_RUBRIC), "concurrency": CONCURRENCY,
+            "details": DETAILS}
 
 
 # ---------------------------------------------------------------- job description + rubric
@@ -231,11 +232,14 @@ def stop_job(jid: str):
 
 
 @app.get("/api/jobs/{jid}/export.{ext}")
-def export(jid: str, ext: str):
+def export(jid: str, ext: str, col: list[str] = Query(default=[])):
+    """col = the columns chosen in the UI, in display order; none given = every column."""
     job = get_job(jid)
     if not job or job["status"] == "running" or ext not in ("xlsx", "csv"):
         raise HTTPException(404, "Nothing to export")
     df = to_dataframe(job["results"], job["rubric"])
+    if col:
+        df = df[[c for c in dict.fromkeys(col) if c in df.columns]]  # unknown names ignored, duplicates dropped
     if ext == "csv":
         body, mime = df.to_csv(index=False).encode("utf-8-sig"), "text/csv"
     else:
@@ -248,6 +252,16 @@ def export(jid: str, ext: str):
 def clear_cache():
     cache.clear()
     return {"ok": True}
+
+
+@app.middleware("http")
+async def revalidate_static(request, call_next):
+    """Browsers otherwise keep serving an old app.js/index.html after an update (no Cache-Control was sent).
+    no-cache still allows the cached copy, but only after a cheap ETag check (304 when unchanged)."""
+    resp = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 app.mount("/", StaticFiles(directory=WEB, html=True), name="web")

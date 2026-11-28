@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS candidates (          -- one row per distinct resume 
   filename TEXT, first_seen REAL, last_seen REAL);
 CREATE TABLE IF NOT EXISTS results (             -- one row per candidate per run
   run_id TEXT, sha256 TEXT, filename TEXT, status TEXT, score REAL, normalized_score REAL, rank INTEGER,
-  summary TEXT, strengths TEXT, gaps TEXT, red_flags TEXT, error TEXT, cached INTEGER,
+  summary TEXT, strengths TEXT, gaps TEXT, red_flags TEXT, error TEXT, cached INTEGER, details TEXT,
   PRIMARY KEY (run_id, sha256, filename));
 CREATE TABLE IF NOT EXISTS criterion_scores (    -- per-criterion points and evidence
   run_id TEXT, sha256 TEXT, filename TEXT, key TEXT, name TEXT, weight REAL, score REAL, evidence TEXT,
@@ -33,9 +33,10 @@ class Store:
         self._lock = threading.Lock()
         self.conn = sqlite3.connect(str(path), check_same_thread=False)
         self.conn.executescript(SCHEMA)
-        if "fingerprint" not in {r[1] for r in self.conn.execute("PRAGMA table_info(runs)")}:  # DB made before reuse
-            self.conn.execute("ALTER TABLE runs ADD COLUMN fingerprint TEXT")
-            self.conn.commit()
+        for table, col in (("runs", "fingerprint"), ("results", "details")):  # columns added after the first release
+            if col not in {r[1] for r in self.conn.execute(f"PRAGMA table_info({table})")}:
+                self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} TEXT")
+                self.conn.commit()
 
     def save_run(self, run_id: str, job: dict, ranked: list[dict]):
         """ranked = with_ranks(results): result dicts that carry a 'rank'. Safe to call again for the same run."""
@@ -57,10 +58,10 @@ class Store:
                               (sha, r["candidate_name"], r["email"], r["phone"], r["role"],
                                r["experience_years"], fn, now, now))
                 norm = round(r["score"] / top * 100, 1) if r.get("score") is not None and top > 0 else None
-                c.execute("INSERT OR REPLACE INTO results VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                c.execute("INSERT OR REPLACE INTO results VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                           (run_id, sha, fn, r["status"], r["score"], norm, r["rank"], r["summary"],
                            json.dumps(r["strengths"]), json.dumps(r["gaps"]), json.dumps(r["red_flags"]),
-                           r["error"], int(r["cached"])))
+                           r["error"], int(r["cached"]), json.dumps(r.get("details") or {})))
                 for k in rubric:
                     cr = (r["criteria"] or {}).get(k.key)
                     if cr is not None:
@@ -80,17 +81,17 @@ class Store:
     def _results(self, where: str, args: tuple) -> list[ScoreResult]:
         """ScoreResults for results rows matching 'where', newest run first, with criteria filled in. Caller locks."""
         q = f"""SELECT x.run_id, x.sha256, x.filename, x.status, x.score, x.summary, x.strengths, x.gaps, x.red_flags,
-                       x.error, x.cached, c.name, c.email, c.phone, c.role, c.experience_years
+                       x.error, x.cached, c.name, c.email, c.phone, c.role, c.experience_years, x.details
                 FROM results x JOIN runs r ON r.id = x.run_id LEFT JOIN candidates c ON c.sha256 = x.sha256
                 WHERE {where} ORDER BY r.started DESC, x.score DESC"""
         out = []
-        for (rid, sha, fn, st, sc, sm, stg, gp, rf, er, ca, nm, em, ph, ro, ey) in self.conn.execute(q, args).fetchall():
+        for (rid, sha, fn, st, sc, sm, stg, gp, rf, er, ca, nm, em, ph, ro, ey, dt) in self.conn.execute(q, args).fetchall():
             crit = {k: {"score": s, "evidence": ev or ""} for k, s, ev in self.conn.execute(
                 "SELECT key, score, evidence FROM criterion_scores WHERE run_id=? AND sha256=? AND filename=?",
                 (rid, sha, fn))}
             out.append(ScoreResult(fn, sha, st, sc, crit, nm or "", em or "", ph or "", ro or "", ey, sm or "",
                                    json.loads(stg or "[]"), json.loads(gp or "[]"), json.loads(rf or "[]"),
-                                   er or "", bool(ca)))
+                                   er or "", bool(ca), json.loads(dt or "{}")))
         return out
 
     def load_run(self, run_id: str) -> dict | None:

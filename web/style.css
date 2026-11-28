@@ -312,3 +312,12 @@ dialog::backdrop { background: rgba(16, 24, 40, 0.5); backdrop-filter: blur(2px)
 .check-row small { display: block; color: var(--muted); margin-top: 0.15rem; }
 #h-body td { vertical-align: middle; }
 #h-body .jd { max-width: 22rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------------- extra-columns picker ---------------- */
+.colpick { position: relative; align-self: flex-end; }
+.colpick summary { list-style: none; cursor: pointer; }
+.colpick summary::-webkit-details-marker { display: none; }
+.colpick-menu { position: absolute; z-index: 5; top: calc(100% + 6px); left: 0; min-width: 210px; display: grid; gap: 0.4rem;
+  max-height: 60vh; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 0.75rem; }
+.colpick-menu label { display: flex; gap: 0.5rem; align-items: center; font-size: 0.85rem; color: var(--text); white-space: nowrap; }

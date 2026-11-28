@@ -9,9 +9,10 @@ const state = {
   cfg: null, jd: "", rubric: [],
   batch: null, job: null, poll: null,
   results: [], used: [],             // results + the rubric they were scored with
-  sort: { key: "rank", dir: 1 },
+  sort: { key: "Rank", dir: 1 },
   f: { min: 0, q: "", th: 70, status: new Set(["scored"]) },
   limit: 200, view: [],
+  hidden: (() => { try { return new Set(JSON.parse(localStorage.getItem("screener.hiddenCols")) || []); } catch { return new Set(); } })(),
 };
 const STORE = "screener.v1";
 const PAGE = 200;
@@ -240,28 +241,51 @@ async function pollJob() {
 /* ---------------------------------------------------------------- results */
 function initResults() {
   $("#results-empty").hidden = true; $("#results-body").hidden = false; $("#exports").hidden = false;
-  $("#dl-xlsx").href = `/api/jobs/${state.job}/export.xlsx`;
-  $("#dl-csv").href = `/api/jobs/${state.job}/export.csv`;
   state.limit = PAGE;
+  renderColPicker(); setExportLinks();
   renderHead(); renderResults();
 }
-const sortVal = (r, key) => {
-  if (key === "rank") return r.rank ?? 1e9;
-  if (key === "score" || key === "norm") return r.score ?? -1; // same order: norm is score / a constant
-  if (key === "name") return (r.candidate_name || r.filename).toLowerCase();
-  if (key === "roll") return rollNo(r).toLowerCase();
-  if (key === "status") return r.status;
-  return r.criteria?.[key]?.score ?? -1;
-};
+
+/* One column list drives the table, the Columns picker and the CSV/Excel export. Each id is the export header
+   (report.py to_dataframe), so the server can pick the same columns by name.
+   shortcut: a criterion named like a fixed column (e.g. "Score") would collide; fine while rubric names differ. */
+function columns() {
+  const sc = (r) => r.status === "scored";
+  const text = (get, cls = "") => ({ cls, cell: (r) => esc(get(r) ?? ""), sort: (r) => String(get(r) ?? "").toLowerCase(), asc: true });
+  const clamp = (get) => ({ cls: "sum", cell: (r) => `<span class="clamp">${esc(get(r))}</span>` });
+  const joined = (a) => (a || []).join("; ");
+  return [
+    { id: "Rank", cls: "rank", cell: (r) => (sc(r) ? `#${r.rank}` : "–"), sort: (r) => r.rank ?? 1e9, asc: true },
+    { id: "Candidate", cls: "cand", asc: true, sort: (r) => (r.candidate_name || r.filename).toLowerCase(),
+      cell: (r) => `<b>${esc(r.candidate_name || r.filename)}${r.red_flags?.length ? `<span class="tag flag" title="${esc(r.red_flags.join("; "))}">Red flag</span>` : ""}</b><span>${esc(r.filename)}</span>` },
+    { id: "Roll number", ...text(rollNo, "roll") },
+    { id: "Score", cls: "score", cell: (r) => (sc(r) ? `<span class="pill ${band(r.score)}">${r.score}</span>` : "–"), sort: (r) => r.score ?? -1 },
+    { id: "Normalized score", cls: "num", cell: (r) => (sc(r) ? norm(r.score) : "–"), sort: (r) => r.score ?? -1 },
+    { id: "File", ...text((r) => r.filename) },
+    { id: "Email", ...text((r) => r.email) },
+    { id: "Exp (yrs)", cls: "num", cell: (r) => esc(r.experience_years ?? ""), sort: (r) => r.experience_years ?? -1 },
+    ...state.used.map((c) => ({
+      id: c.name, cls: (r) => "num" + (sc(r) && !r.criteria?.[c.key]?.score ? " zero" : ""),
+      cell: (r) => (sc(r) ? `${r.criteria?.[c.key]?.score ?? 0}/${Math.floor(c.weight)}` : ""),
+      sort: (r) => r.criteria?.[c.key]?.score ?? -1 })),
+    ...Object.entries(state.cfg?.details || {}).map(([k, label]) => ({ id: label, ...text((r) => r.details?.[k], "detail") })),
+    { id: "Summary", ...clamp((r) => (sc(r) ? r.summary : r.error)) },
+    { id: "Strengths", ...clamp((r) => joined(r.strengths)) },
+    { id: "Gaps", ...clamp((r) => joined(r.gaps)) },
+    { id: "Red flags", ...clamp((r) => joined(r.red_flags)) },
+    { id: "Status", asc: true, sort: (r) => r.status,
+      cell: (r) => `<span class="tag ${sc(r) ? "ok" : r.status === "duplicate" ? "" : "bad"}">${sc(r) ? "Scored" : esc(r.status)}</span>` },
+    { id: "Error", ...clamp((r) => r.error) },
+  ];
+}
+const shownCols = () => columns().filter((c) => !state.hidden.has(c.id));
 function renderHead() {
   const s = state.sort;
-  const th = (key, label, extra = "") => {
-    const aria = s.key === key ? ` aria-sort="${s.dir > 0 ? "ascending" : "descending"}"` : "";
-    return `<th data-k="${esc(key)}"${aria} tabindex="0" scope="col">${label}${extra}</th>`;
-  };
-  $("#thead").innerHTML = "<tr>" + th("rank", "Rank") + th("name", "Candidate") + th("roll", "Roll number") + th("score", "Score") + th("norm", "Normalized score")
-    + state.used.map((c) => th(c.key, esc(c.name))).join("")
-    + '<th scope="col" style="cursor:default">Summary</th>' + th("status", "Status") + "</tr>";
+  $("#thead").innerHTML = "<tr>" + shownCols().map((c) => {
+    if (!c.sort) return `<th scope="col" style="cursor:default">${esc(c.id)}</th>`;
+    const aria = s.key === c.id ? ` aria-sort="${s.dir > 0 ? "ascending" : "descending"}"` : "";
+    return `<th data-k="${esc(c.id)}"${aria} tabindex="0" scope="col">${esc(c.id)}</th>`;
+  }).join("") + "</tr>";
 }
 function applyFilters() {
   const { min, q, status } = state.f;
@@ -272,7 +296,8 @@ function applyFilters() {
       .join(" ").toLowerCase().includes(needle));
   }
   const { key, dir } = state.sort;
-  rows = rows.map((r) => [sortVal(r, key), r]).sort((a, b) => {
+  const sortVal = columns().find((c) => c.id === key)?.sort || ((r) => r.rank ?? 1e9);
+  rows = rows.map((r) => [sortVal(r), r]).sort((a, b) => {
     const [x, y] = [a[0], b[0]];
     const c = x < y ? -1 : x > y ? 1 : 0;
     // score columns read best high-to-low when first clicked: dir stores the user's choice
@@ -293,8 +318,9 @@ function renderResults() {
 
   state.view = applyFilters();
   const shown = state.view.slice(0, state.limit);
-  $("#tbody").innerHTML = shown.map((r, i) => rowHTML(r, i)).join("") ||
-    `<tr><td colspan="${state.used.length + 7}" class="muted">No candidates match these filters.</td></tr>`;
+  const cols = shownCols();
+  $("#tbody").innerHTML = shown.map((r, i) => rowHTML(r, i, cols)).join("") ||
+    `<tr><td colspan="${cols.length || 1}" class="muted">No candidates match these filters.</td></tr>`;
   $("#table-foot").textContent = `Showing ${shown.length} of ${state.view.length} (${state.results.length} total)`;
   $("#more").hidden = shown.length >= state.view.length;
 
@@ -308,26 +334,17 @@ const band = (s) => (s >= state.f.th ? "hi" : s >= state.f.th * 0.75 ? "mid" : "
 // % of the top candidate's score (over all scored results, not just the filtered rows)
 const norm = (s) => { const t = Math.max(0, ...state.results.map((r) => r.score ?? 0)); return t > 0 ? fmt(Math.round((s / t) * 1000) / 10) : "–"; };
 const fmt = (t) => (t % 1 ? t.toFixed(1) : t);
-function rowHTML(r, i) {
-  const name = esc(r.candidate_name || r.filename);
-  const flag = r.red_flags?.length ? `<span class="tag flag" title="${esc(r.red_flags.join("; "))}">Red flag</span>` : "";
-  const cand = `<td class="cand"><b>${name}${flag}</b><span>${esc(r.filename)}</span></td><td class="roll">${esc(rollNo(r))}</td>`;
-  if (r.status !== "scored") {
-    return `<tr tabindex="0" data-i="${i}"><td class="rank">–</td>${cand}<td class="score">–</td><td class="num">–</td>`
-      + `${state.used.map(() => "<td></td>").join("")}<td class="sum"><span class="clamp">${esc(r.error)}</span></td><td><span class="tag ${r.status === "duplicate" ? "" : "bad"}">${esc(r.status)}</span></td></tr>`;
-  }
-  const items = state.used.map((c) => ({ ...c, pts: r.criteria[c.key]?.score ?? 0 }));
-  const cells = items.map((c) => `<td class="num${c.pts ? "" : " zero"}">${c.pts}/${Math.floor(c.weight)}</td>`).join("");
-  return `<tr tabindex="0" data-i="${i}"><td class="rank">#${r.rank}</td>${cand}`
-    + `<td class="score"><span class="pill ${band(r.score)}">${r.score}</span></td><td class="num">${norm(r.score)}</td>${cells}`
-    + `<td class="sum"><span class="clamp">${esc(r.summary)}</span></td><td><span class="tag ok">Scored</span></td></tr>`;
+function rowHTML(r, i, cols) {
+  return `<tr tabindex="0" data-i="${i}">` + cols.map((c) =>
+    `<td class="${esc(typeof c.cls === "function" ? c.cls(r) : c.cls || "")}">${c.cell(r)}</td>`).join("") + "</tr>";
 }
 
 $("#thead").addEventListener("click", (e) => {
   const th = e.target.closest("th[data-k]");
   if (!th) return;
-  const k = th.dataset.k;
-  state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (k === "rank" || k === "name" || k === "status" ? 1 : -1) };
+  const k = th.dataset.k, col = columns().find((c) => c.id === k);
+  // text columns start A-Z, score columns start highest first; a second click reverses
+  state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (col?.asc ? 1 : -1) };
   renderHead(); renderResults();
 });
 $("#thead").addEventListener("keydown", (e) => { if (e.key === "Enter") e.target.click(); });
@@ -419,6 +436,7 @@ $("#clear-cache").addEventListener("click", async () => {
   const chip = $("#model-chip");
   chip.hidden = false;
   chip.innerHTML = `<span class="k">Model</span><span class="v">${esc(state.cfg.model)}</span><span class="s">${esc(state.cfg.label)} · ${esc(state.cfg.samples)}× per resume</span>`;
+  renderColPicker();
   renderCriteria();
   if (!state.cfg.ready) banner("No API key found. Set LLM_API_KEY in .env and restart the server to enable screening.");
 })();
@@ -464,3 +482,23 @@ $("#h-body").addEventListener("click", async (e) => {
   } catch (err) { banner("Could not open that run: " + err.message); }
 });
 $("#h-refresh").addEventListener("click", loadHistory);
+
+/* ---------------------------------------------------------------- columns picker (remembered per browser) */
+// Hidden columns are stored (not shown ones), so a new column, such as a new rubric criterion, appears by default.
+const HIDDEN = "screener.hiddenCols";
+function renderColPicker() {
+  $("#col-list").innerHTML = columns().map((c) =>
+    `<label><input type="checkbox" value="${esc(c.id)}" ${state.hidden.has(c.id) ? "" : "checked"}> ${esc(c.id)}</label>`).join("");
+}
+function setExportLinks() {
+  const q = shownCols().map((c) => "col=" + encodeURIComponent(c.id)).join("&");
+  $("#dl-xlsx").href = `/api/jobs/${state.job}/export.xlsx?${q}`;
+  $("#dl-csv").href = `/api/jobs/${state.job}/export.csv?${q}`;
+}
+$("#col-list").addEventListener("change", (e) => {
+  if (!$$("#col-list input:checked").length) { e.target.checked = true; return; } // keep at least one column
+  state.hidden = new Set($$("#col-list input:not(:checked)").map((x) => x.value));
+  try { localStorage.setItem(HIDDEN, JSON.stringify([...state.hidden])); } catch { /* storage blocked */ }
+  if (state.results.length) { setExportLinks(); renderHead(); renderResults(); }
+});
+document.addEventListener("click", (e) => { const p = $("#colpick"); if (p.open && !p.contains(e.target)) p.open = false; });
