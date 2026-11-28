@@ -153,7 +153,7 @@ class LLMClient:
         await self._http.aclose()
 
     async def complete(self, system: str, user: str, parse: Callable[[str], Any] | None = None,
-                       images: list[bytes] | None = None) -> Any:
+                       images: list[bytes] | None = None, schema: dict | None = None) -> Any:
         """One logical call with up to cfg.max_retries retries, exponential backoff and jitter.
 
         Retried: rate limits (429/529), server errors (5xx), timeouts/network errors, and, when `parse` is given,
@@ -165,7 +165,7 @@ class LLMClient:
         for attempt in range(retries + 1):
             wait = 0.0
             try:
-                raw = await self._complete_once(system, prompt, images or [])
+                raw = await self._complete_once(system, prompt, images or [], schema)
                 return parse(raw) if parse else raw
             except LLMError as exc:
                 if not exc.retryable or attempt == retries:
@@ -194,18 +194,19 @@ class LLMClient:
             raise LLMError(f"HTTP {r.status_code}: {r.text[:400]}")
         return r.json()
 
-    async def _complete_once(self, system: str, user: str, images: list[bytes]) -> str:
+    async def _complete_once(self, system: str, user: str, images: list[bytes], schema: dict | None = None) -> str:
         c, base = self.cfg, self.cfg.resolved_base_url()
         if c.provider == "mock":
             return _mock_response(user)
 
         entry = await self._limiter.acquire((len(system) + len(user)) // 3 + 1600 * len(images)) if self._limiter else None
-        data, text = await self._request(c, base, system, user, images)
+        data, text = await self._request(c, base, system, user, images, schema)
         if entry is not None:
             self._limiter.settle(entry, *_usage(data))
         return text
 
-    async def _request(self, c: LLMConfig, base: str, system: str, user: str, images: list[bytes]) -> tuple[dict, str]:
+    async def _request(self, c: LLMConfig, base: str, system: str, user: str, images: list[bytes],
+                       schema: dict | None = None) -> tuple[dict, str]:
         b64 = [base64.b64encode(i).decode() for i in images]  # page renders are JPEG
         if c.provider == "anthropic":
             body = {"model": c.model, "max_tokens": c.max_tokens,  # no temperature: rejected on Claude 5 models
@@ -213,11 +214,17 @@ class LLMClient:
                         *({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": d}} for d in b64),
                         {"type": "text", "text": user}]}]}
             body.update(_anthropic_reasoning(c))
-            data = await self._post(
-                f"{base}/v1/messages",
-                {"x-api-key": c.api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                body,
-            )
+            if schema:  # structured outputs: reply is guaranteed to match the schema (no malformed-JSON retries)
+                body["output_config"] = {**body.get("output_config", {}),
+                                         "format": {"type": "json_schema", "schema": schema}}
+            headers = {"x-api-key": c.api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
+            try:
+                data = await self._post(f"{base}/v1/messages", headers, body)
+            except LLMError as exc:  # model/account without structured outputs: fall back to prompt-only JSON
+                if not (schema and "HTTP 400" in str(exc) and ("format" in str(exc) or "schema" in str(exc))):
+                    raise
+                body["output_config"].pop("format")
+                data = await self._post(f"{base}/v1/messages", headers, body)
             return data, "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
 
         if c.provider in ("openai", "compatible"):

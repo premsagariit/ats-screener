@@ -241,9 +241,29 @@ def _parse_score(raw: str) -> dict:
     return data
 
 
-async def _sample(client, system, prompt, images=None) -> dict:
+def level_points(weight: float) -> list[int]:
+    """The only point values a criterion can get (same snapping as build_result)."""
+    return sorted({min(int(weight), round(weight * lv)) for lv in LEVELS}) if weight > 0 else [0]
+
+
+def score_schema(rubric: list[Criterion]) -> dict:
+    """JSON schema for structured outputs. Each criterion's score is an enum of its five level values, so the model
+    picks a level instead of a free number, which removes small run-to-run drift between neighbouring values."""
+    s, arr = {"type": "string"}, {"type": "array", "items": {"type": "string"}}
+    crit = {"type": "object", "additionalProperties": False, "required": [c.key for c in rubric],
+            "properties": {c.key: {"type": "object", "additionalProperties": False, "required": ["evidence", "score"],
+                                   "properties": {"evidence": s, "score": {"type": "integer",
+                                                                           "enum": level_points(c.weight)}}}
+                           for c in rubric}}
+    props = {"candidate_name": s, "email": s, "phone": s, "current_or_latest_role": s,
+             "total_experience_years": {"type": "number"}, "criteria": crit, "summary": s,
+             "strengths": arr, "gaps": arr, "red_flags": arr}
+    return {"type": "object", "additionalProperties": False, "required": list(props), "properties": props}
+
+
+async def _sample(client, system, prompt, images=None, schema=None) -> dict:
     """One scoring call; LLMClient.complete retries API errors and malformed JSON (max 3 retries, backoff + jitter)."""
-    return await client.complete(system, prompt, parse=_parse_score, images=images)
+    return await client.complete(system, prompt, parse=_parse_score, images=images, schema=schema)
 
 
 def _median_merge(samples: list[dict]) -> dict:
@@ -261,7 +281,8 @@ def _median_merge(samples: list[dict]) -> dict:
 
 
 async def _call_and_parse(client, system, prompt, r, rubric, cache, key, samples: int = 1) -> ScoreResult:
-    got = await asyncio.gather(*(_sample(client, system, prompt, r.images) for _ in range(max(1, samples))),
+    schema = score_schema(rubric)
+    got = await asyncio.gather(*(_sample(client, system, prompt, r.images, schema) for _ in range(max(1, samples))),
                                return_exceptions=True)
     ok = [g for g in got if isinstance(g, dict)]
     if not ok:  # every sample failed: report the first error
