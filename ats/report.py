@@ -19,9 +19,9 @@ def to_dataframe(results: list[ScoreResult], rubric: list[Criterion]) -> pd.Data
             "Score": r.score,
             "Normalized score": round(r.score / top * 100, 1) if r.score is not None and top > 0 else None,
             "Candidate": r.candidate_name or r.filename,
+            "Roll number": r.email.split("@")[0].strip(),  # the part of the email before "@"
             "File": r.filename,
             "Email": r.email,
-            "Phone": r.phone,
             "Latest role": r.role,
             "Exp (yrs)": r.experience_years,
         }
@@ -42,10 +42,10 @@ def to_dataframe(results: list[ScoreResult], rubric: list[Criterion]) -> pd.Data
     df["_s"] = df["Status"].map(STATUS_ORDER).fillna(9)
     df = df.sort_values(["_s", "Score", "Candidate"], ascending=[True, False, True], na_position="last")
     df = df.drop(columns="_s").reset_index(drop=True)
-    # Dense rank among scored resumes; ties share a rank.
+    # Dense rank among scored resumes: ties share a rank and the next rank follows with no gap (1, 1, 2).
     scored = df["Status"] == "scored"
     df.insert(0, "Rank", pd.NA)
-    df.loc[scored, "Rank"] = df.loc[scored, "Score"].rank(method="min", ascending=False).astype(int)
+    df.loc[scored, "Rank"] = df.loc[scored, "Score"].rank(method="dense", ascending=False).astype(int)
     return df
 
 

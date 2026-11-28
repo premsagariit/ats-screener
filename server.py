@@ -117,7 +117,7 @@ def drop_batch(bid: str):
 
 # ---------------------------------------------------------------- screening jobs
 def with_ranks(results: list[ScoreResult]) -> list[dict]:
-    scores = [r.score for r in results if r.status == "scored" and r.score is not None]
+    scores = {r.score for r in results if r.status == "scored" and r.score is not None}  # distinct: dense ranks (1, 1, 2)
     out = []
     for r in results:
         d = asdict(r)
